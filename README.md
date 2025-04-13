@@ -129,13 +129,13 @@ servicio-cliente → [Exchange: eventos_clientes] → [Queue: cola_analiticas] �
 
 ## 4. Inicio de implementación:
 
-### I. Tecnologías utilizadas:
+### 4.1. Tecnologías utilizadas:
 - **Docker**: Contenedores para gestionar los servicios.
 - **Python & Flask**: Implementación de servicios backend.
 - **RabbitMQ**: Sistema de mensajería para desacoplar los servicios.
 - **Traefik**: Balanceo de carga y enrutamiento de tráfico HTTP.
 
-### II. Instrucciones:
+### 4.2. Instrucciones:
 
 1. **Clonar el repositorio**:
    ```bash
@@ -151,28 +151,28 @@ servicio-cliente → [Exchange: eventos_clientes] → [Queue: cola_analiticas] �
    - Traefik se puede acceder a través de `http://localhost:8080` para gestionar el enrutamiento.
    - RabbitMQ está disponible en `http://localhost:15672`.
 
-### 4. Pruebas de Verificación: Comprobar que todo está bien:
+### 4.3 Pruebas de Verificación: Comprobar que todo está bien:
 
-#### 4.1 Verificar el estado de los contenedores:
+#### 4.3.1 Verificar el estado de los contenedores:
 ```bash
 docker ps
 ```
 
-#### 4.2 Acceder al dashboard de Traefik:
+#### 4.3.2 Acceder al dashboard de Traefik:
 ```bash
 curl -s http://localhost:8081/api/http/routers | jq
 curl http://localhost:8081/dashboard/
 ```
 
-#### 4.3 Acceder al dashboard de RabbitMQ:
+#### 4.3.3 Acceder al dashboard de RabbitMQ:
 
-##### 4.3.1 Ingresar como usuario gest al panel de control:
+##### 4.3.3.1 Ingresar como usuario gest al panel de control:
 ```bash
 curl -u guest:guest http://localhost:15672/api/overview | jq
 docker exec -it rabbitmq6 rabbitmqctl list_users
 ```
 
-##### 4.3.2 Para acceder desde el exterior (por ejemplo máquina física sobre la cual está la MV) se debe crear un nuevo usuario con permisos adecuados:
+##### 4.3.3.2 Para acceder desde el exterior (por ejemplo máquina física sobre la cual está la MV) se debe crear un nuevo usuario con permisos adecuados:
 ```bash
 docker exec -it rabbitmq6 rabbitmqctl add_user dianey 'dianey94*'
 docker exec -it rabbitmq6 rabbitmqctl set_permissions -p / dianey ".*" ".*" ".*"
@@ -180,13 +180,13 @@ docker exec -it rabbitmq6 rabbitmqctl set_user_tags dianey administrator
 docker exec -it rabbitmq6 rabbitmqctl list_users
 ```
 
-##### 4.3.3 Acceder desde el navegador desde el exterior:
+##### 4.3.3.3 Acceder desde el navegador desde el exterior:
 ```bash
 http://IPMáquinaVirtual:15672
 ```
 Usar la credenciales del paso anterior
 
-### 5. Verificar el acceso a los servicios a través de Traefik:
+### 4.3.4 Verificar el acceso a los servicios a través de Traefik:
 Accede a la ruta `/panel` desde el host y desde el exterior, respectivamente:
 ```bash
 curl http://localhost/panel
@@ -196,7 +196,7 @@ Desde el navegador exterior:
 http://IPMáquinaVirtual/panel
 ```
 
-### 6. Verificar que el servicio cliente (cliente_x) está publicando mensajes a RabbitMQ:
+### 4.3.5 Verificar que el servicio cliente (cliente_x) está publicando mensajes a RabbitMQ:
 Enviar un mensaje desde cliente_x:
 ```bash
 curl -X POST http://localhost:5046/send -H "Content-Type: application/json" -d '{"message": "mensaje de prueba"}'
@@ -207,7 +207,7 @@ Ver logs del cliente:
 docker-compose logs -f cliente_x
 ```
 
-### 7. Verificar que el servicio analíticas está exponiendo `/reporte` correctamente:
+### 4.3.6 Verificar que el servicio analíticas está exponiendo `/reporte` correctamente:
 ```bash
 curl http://localhost:5064/reporte
 ```
