@@ -1,0 +1,99 @@
+services:
+  # Servicio de Traefik
+  reverse-proxy:
+    image: traefik:latest
+    container_name: docker_reverse-proxy_traefik
+    restart: always # Reinicia el contenedor automáticamente si se detiene
+    environment:
+      - TZ=America/Bogota  # Define la zona horaria para el contenedor para efectos de los logs
+    networks:
+      - rabbitMQ-net
+    ports:
+      - "80:80"   # Expone el puerto 80 para tráfico HTTP
+      - "8081:8080" # Expone el puerto 8081 externamente para acceder al panel de administración de Traefik.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro # Permite que Traefik acceda a los contenedores de Docker (modo de solo lectura).
+    command:
+      - --api.dashboard=true
+      - --api.insecure=true  # ⚠️ solo para desarrollo
+      - --entrypoints.web.address=:80
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+
+  # Servicio de RabbitMQ
+  rabbitmq-service: #Docker registra este nombre (rabbitMQ) como un DNS interno, así que desde otro contenedor puedes conectarte através de el.
+    image: rabbitmq:3.12.12-management   # Imagen oficial de RabbitMQ con la interfaz de administración incluida
+    container_name: rabbitmq6            # Nombre del contenedor (opcional, para facilitar la referencia).
+    ports:
+      - "5672:5672"                      # Puerto para la comunicación AMQP (usado por Pika/Python); AMQP (para apps externas como Python)
+      - "15672:15672"                    # Puerto para la interfaz web de administración de RabbitMQ
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBIT_USER}  # Usuario por defecto definido en el archivo .env
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASS}  # Contraseña por defecto definida en el archivo .env
+    networks:
+      - rabbitMQ-net                      # Conectado a la red virtual compartida
+    restart: always 
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Servicio con flask que publica mensajes a RabbitMQ (cliente-X_send.py)
+  cliente_x:
+    build: ./publisher                   # Construye el contenedor a partir del Dockerfile ubicado en la carpeta "api"
+    container_name: rabbit_clientx_sender4
+    ports:
+      - 5046:5000
+    depends_on:
+      rabbitmq-service:
+        condition: service_healthy       # Espera a que RabbitMQ esté sano
+    environment:                         # Variables de entorno que pueden ser usadas por send.py
+      RABBIT_HOST: ${RABBIT_HOST}
+      RABBIT_PORT: ${RABBIT_PORT}
+      RABBIT_USER: ${RABBIT_USER}
+      RABBIT_PASS: ${RABBIT_PASS}
+    networks:
+      - rabbitMQ-net                       # Conectado a la misma red para comunicarse con RabbitMQ
+    restart: always 
+
+  # Servicio que recibe mensajes de RabbitMQ (receive.py)
+  analiticas:
+    build: ./consumer                    # Construye el contenedor a partir del Dockerfile ubicado en la carpeta "consumer"
+    container_name: rabbit_analiticas_receiver6 
+    ports:
+      - "5064:5000"  # Esto mapea el puerto 5000 del contenedor al puerto 5064 de tu máquina local
+    depends_on:
+      rabbitmq-service:
+        condition: service_healthy       # Espera a que RabbitMQ esté sano 
+    environment:
+      RABBIT_HOST: ${RABBIT_HOST}
+      RABBIT_PORT: ${RABBIT_PORT}
+      RABBIT_USER: ${RABBIT_USER}
+      RABBIT_PASS: ${RABBIT_PASS}
+    networks:
+      - rabbitMQ-net                      # Red compartida para comunicación interna
+    restart: always 
+
+  # Servicio que consulta periódicamente a servicio-analiticas y expone /panel
+  panel-visual:
+    build: ./panel_visual
+    container_name: panel-visual6
+    ports:
+      - "8080:5000"     # 8080 externo, 5000 interno (Flask por defecto)
+    depends_on:
+      - analiticas
+    networks:
+      - rabbitMQ-net
+    restart: always
+    labels:                                       # Etiquetas usadas por Traefik para descubrir y enrutar el servicio
+      - "traefik.enable=true"                     # Habilita Traefik para que gestione este contenedor
+      - "traefik.http.routers.panel.rule=PathPrefix(`/panel`)"  # Traefik enrutará cualquier solicitud que empiece con /panel
+      - "traefik.http.routers.panel.entrypoints=web"  # Define que esta ruta estará disponible en el entrypoint 'web' (por defecto en el puerto 80)
+      - "traefik.http.routers.panel.middlewares=strip-panel" # Asocia el middleware llamado 'strip-panel' a esta ruta
+      - "traefik.http.middlewares.strip-panel.stripPrefix.prefixes=/panel"  # Define el middleware 'strip-panel': quita '/panel' del path antes de pasarlo al contenedor
+      - "traefik.http.services.panel.loadbalancer.server.port=5000" # Traefik redirige la solicitud al puerto interno 5000 del contenedor (el que usa Flask por defecto)
+
+networks:
+  rabbitMQ-net:  # Red compartida entre servicios para que puedan comunicarse por nombre de contenedor (DNS interno de Docker)
